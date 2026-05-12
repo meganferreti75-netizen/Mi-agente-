@@ -6,11 +6,11 @@ import feedparser
 from urllib.parse import quote
 
 # =========================
-# CONFIG
+# CONFIGURACIÓN
 # =========================
 
 GITHUB_TOKEN = "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"
-REPO = "meganferreti75-netizen/Agent-books"
+REPO = "meganferreti75-netizen/Agent-books" 
 FILE_PATH = "estado_libros.json"
 BRANCH = "main"
 
@@ -29,7 +29,7 @@ cajas = {
 }
 
 # =========================
-# ARXIV SCRAPER
+# ARXIV
 # =========================
 
 def buscar_libros(query="graph theory", max_results=5):
@@ -48,7 +48,7 @@ def buscar_libros(query="graph theory", max_results=5):
     return resultados
 
 # =========================
-# CLASIFICADOR SIMPLE
+# CLASIFICACIÓN
 # =========================
 
 def clasificar(texto):
@@ -70,7 +70,7 @@ def clasificar(texto):
     return "matematicas"
 
 # =========================
-# GITHUB PERSISTENCIA (VERIFICADA)
+# GITHUB (VERIFICADO)
 # =========================
 
 def guardar_en_github(data):
@@ -86,8 +86,8 @@ def guardar_en_github(data):
 
     # obtener SHA si existe
     r = requests.get(url, headers=headers)
-
     sha = None
+
     if r.status_code == 200:
         sha = r.json().get("sha")
 
@@ -102,17 +102,14 @@ def guardar_en_github(data):
 
     resp = requests.put(url, headers=headers, json=payload)
 
-    # LOG CRÍTICO (VERDAD DEL SISTEMA)
-    print("REPO:", REPO)
-    print("FILE_PATH:", FILE_PATH)
-    print("BRANCH:", BRANCH)
+    # VERDAD DEL SISTEMA
     print("GITHUB STATUS:", resp.status_code)
     print("GITHUB RESPONSE:", resp.text)
 
     if resp.status_code in [200, 201]:
-        print("ESCRITURA EXITOSA EN GITHUB")
+        return True
     else:
-        print("FALLO EN ESCRITURA EN GITHUB")
+        return False
 
 # =========================
 # PIPELINE
@@ -132,10 +129,16 @@ def procesar():
         print("PROCESANDO:", libro["nombre"])
         print("CLASIFICADO EN:", categoria)
 
-    guardar_en_github(cajas)
+    # persistencia validada
+    ok = guardar_en_github(cajas)
+
+    if ok:
+        print("GUARDADO EN GITHUB CONFIRMADO")
+    else:
+        print("FALLO EN PERSISTENCIA")
 
 # =========================
-# AGENTE LOOP
+# AGENTE
 # =========================
 
 def agente():
