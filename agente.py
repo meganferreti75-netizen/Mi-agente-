@@ -6,7 +6,7 @@ import feedparser
 from urllib.parse import quote
 
 # =========================
-# CONFIGURACIÓN GITHUB
+# CONFIGURACIÓN
 # =========================
 
 GITHUB_TOKEN = "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"
@@ -15,7 +15,7 @@ FILE_PATH = "estado_libros.json"
 BRANCH = "main"
 
 # =========================
-# ESTADO EN MEMORIA
+# ESTADO
 # =========================
 
 cajas = {
@@ -29,7 +29,7 @@ cajas = {
 }
 
 # =========================
-# BUSCADOR ARXIV
+# ARXIV SEARCH
 # =========================
 
 def buscar_libros(query="graph theory", max_results=5):
@@ -41,9 +41,8 @@ def buscar_libros(query="graph theory", max_results=5):
 
     for entry in feed.entries:
         resultados.append({
-            "titulo": entry.title,
-            "link": entry.id,
-            "resumen": entry.summary
+            "nombre": entry.title,
+            "link": entry.id
         })
 
     return resultados
@@ -57,7 +56,7 @@ def clasificar(texto):
 
     if any(k in t for k in ["graph", "algebra", "geometry", "number"]):
         return "matematicas"
-    if "physics" in t or "quantum" in t:
+    if "physics" in t:
         return "fisica"
     if "chem" in t:
         return "quimica"
@@ -71,7 +70,7 @@ def clasificar(texto):
     return "matematicas"
 
 # =========================
-# GUARDAR EN GITHUB
+# GITHUB SAVE (CORREGIDO)
 # =========================
 
 def guardar_en_github(data):
@@ -85,10 +84,12 @@ def guardar_en_github(data):
     contenido = json.dumps(data, ensure_ascii=False, indent=2)
     contenido_b64 = base64.b64encode(contenido.encode()).decode()
 
+    # obtener SHA si existe
     r = requests.get(url, headers=headers)
+
     sha = None
     if r.status_code == 200:
-        sha = r.json()["sha"]
+        sha = r.json().get("sha")
 
     payload = {
         "message": "update libros agent",
@@ -99,29 +100,42 @@ def guardar_en_github(data):
     if sha:
         payload["sha"] = sha
 
-    requests.put(url, headers=headers, json=payload)
+    resp = requests.put(url, headers=headers, json=payload)
+
+    # LOG CRÍTICO (OBLIGATORIO)
+    print("REPO:", REPO)
+    print("FILE:", FILE_PATH)
+    print("BRANCH:", BRANCH)
+    print("GITHUB STATUS CODE:", resp.status_code)
+    print("GITHUB RESPONSE:", resp.text)
+
+    if resp.status_code in [200, 201]:
+        print("ESCRITURA EXITOSA EN GITHUB")
+    else:
+        print("ERROR EN ESCRITURA EN GITHUB")
 
 # =========================
-# PROCESAMIENTO
+# PIPELINE
 # =========================
 
 def procesar():
     resultados = buscar_libros("graph theory")
 
     for libro in resultados:
-        categoria = clasificar(libro["titulo"])
+        categoria = clasificar(libro["nombre"])
 
         cajas[categoria].append({
-            "nombre": libro["titulo"],
+            "nombre": libro["nombre"],
             "link": libro["link"]
         })
 
-        print("GUARDADO EN:", categoria)
+        print("PROCESADO:", libro["nombre"])
+        print("CLASIFICADO EN:", categoria)
 
     guardar_en_github(cajas)
 
 # =========================
-# AGENTE PRINCIPAL
+# AGENTE
 # =========================
 
 def agente():
