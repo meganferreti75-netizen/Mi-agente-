@@ -9,8 +9,8 @@ from urllib.parse import quote
 # CONFIGURACIÓN GITHUB
 # =========================
 
-GITHUB_TOKEN = "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"
-REPO = "meganferreti75-netizen/Agent-books "
+GITHUB_TOKEN = "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"
+REPO = "meganferreti75-netizen/Agent-books"
 FILE_PATH = "estado_libros.json"
 BRANCH = "main"
 
