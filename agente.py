@@ -6,7 +6,7 @@ import feedparser
 from urllib.parse import quote
 
 # =========================
-# CONFIGURACIÓN
+# CONFIG
 # =========================
 
 GITHUB_TOKEN = "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"
@@ -29,7 +29,7 @@ cajas = {
 }
 
 # =========================
-# ARXIV SEARCH
+# ARXIV SCRAPER
 # =========================
 
 def buscar_libros(query="graph theory", max_results=5):
@@ -48,7 +48,7 @@ def buscar_libros(query="graph theory", max_results=5):
     return resultados
 
 # =========================
-# CLASIFICACIÓN SIMPLE
+# CLASIFICADOR SIMPLE
 # =========================
 
 def clasificar(texto):
@@ -70,7 +70,7 @@ def clasificar(texto):
     return "matematicas"
 
 # =========================
-# GITHUB SAVE (CORREGIDO)
+# GITHUB PERSISTENCIA (VERIFICADA)
 # =========================
 
 def guardar_en_github(data):
@@ -102,17 +102,17 @@ def guardar_en_github(data):
 
     resp = requests.put(url, headers=headers, json=payload)
 
-    # LOG CRÍTICO (OBLIGATORIO)
+    # LOG CRÍTICO (VERDAD DEL SISTEMA)
     print("REPO:", REPO)
-    print("FILE:", FILE_PATH)
+    print("FILE_PATH:", FILE_PATH)
     print("BRANCH:", BRANCH)
-    print("GITHUB STATUS CODE:", resp.status_code)
+    print("GITHUB STATUS:", resp.status_code)
     print("GITHUB RESPONSE:", resp.text)
 
     if resp.status_code in [200, 201]:
         print("ESCRITURA EXITOSA EN GITHUB")
     else:
-        print("ERROR EN ESCRITURA EN GITHUB")
+        print("FALLO EN ESCRITURA EN GITHUB")
 
 # =========================
 # PIPELINE
@@ -129,13 +129,13 @@ def procesar():
             "link": libro["link"]
         })
 
-        print("PROCESADO:", libro["nombre"])
+        print("PROCESANDO:", libro["nombre"])
         print("CLASIFICADO EN:", categoria)
 
     guardar_en_github(cajas)
 
 # =========================
-# AGENTE
+# AGENTE LOOP
 # =========================
 
 def agente():
