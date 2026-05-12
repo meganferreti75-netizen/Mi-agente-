@@ -32,6 +32,8 @@ cajas = {
     "estadistica": []
 }
 
+vistos = set()
+
 # =========================
 # DOMINIOS
 # =========================
@@ -39,13 +41,9 @@ cajas = {
 DOMINIOS = [
     "mathematics", "algebra", "geometry", "topology", "analysis",
     "number theory", "combinatorics", "graph theory",
-    "probability", "statistics", "stochastic processes",
-    "physics", "quantum mechanics", "relativity",
-    "computer science", "machine learning", "artificial intelligence",
-    "optimization", "information theory",
-    "chemistry", "biology", "neuroscience",
-    "economics", "game theory",
-    "logic", "category theory"
+    "probability", "statistics", "physics",
+    "computer science", "machine learning",
+    "chemistry", "biology", "neuroscience"
 ]
 
 # =========================
@@ -63,11 +61,7 @@ def clasificar(texto):
         return "quimica"
     if "bio" in t or "neuro" in t:
         return "biologia"
-    if "philosophy" in t:
-        return "filosofia"
-    if "engineering" in t:
-        return "ingenieria"
-    if "machine learning" in t or "artificial intelligence" in t:
+    if "machine learning" in t:
         return "cs"
     if "statistics" in t or "probability" in t:
         return "estadistica"
@@ -75,35 +69,117 @@ def clasificar(texto):
     return "matematicas"
 
 # =========================
-# ARXIV
+# FUENTE 1: ARXIV
 # =========================
 
-def buscar_libros(query, max_results=20):
+def fetch_arxiv(query, max_results=15):
     query = quote(query)
 
     url = (
         "http://export.arxiv.org/api/query?"
-        f"search_query=all:{query}"
-        "&start=0"
-        f"&max_results={max_results}"
+        f"search_query=all:{query}&start=0&max_results={max_results}"
     )
 
-    feed = feedparser.parse(url)
-    return feed.entries
+    try:
+        feed = feedparser.parse(url)
+        return feed.entries
+    except:
+        return []
 
-# =========================
-# FILTRO DE "DOCUMENTO COMPLETO"
-# =========================
+def normalizar_arxiv(entry):
+    titulo = getattr(entry, "title", "")
+    link = getattr(entry, "id", "")
 
-def tiene_pdf(entry):
+    pdf = None
     if hasattr(entry, "links"):
         for l in entry.links:
             if "pdf" in l.get("href", ""):
-                return True
-    return False
+                pdf = l.get("href")
 
-def tiene_link(entry):
-    return hasattr(entry, "id") and entry.id is not None
+    return {
+        "titulo": titulo,
+        "link": link,
+        "pdf": pdf
+    }
+
+# =========================
+# FUENTE 2: SEMANTIC SCHOLAR
+# =========================
+
+def fetch_semantic(query, max_results=15):
+    url = "https://api.semanticscholar.org/graph/v1/paper/search"
+
+    params = {
+        "query": query,
+        "limit": max_results,
+        "fields": "title,url,openAccessPdf"
+    }
+
+    try:
+        r = requests.get(url, params=params)
+        return r.json().get("data", [])
+    except:
+        return []
+
+def normalizar_semantic(entry):
+    return {
+        "titulo": entry.get("title", ""),
+        "link": entry.get("url", ""),
+        "pdf": (entry.get("openAccessPdf") or {}).get("url")
+    }
+
+# =========================
+# FUENTE 3: OPENALEX
+# =========================
+
+def fetch_openalex(query, max_results=15):
+    url = "https://api.openalex.org/works"
+
+    params = {
+        "search": query,
+        "per-page": max_results
+    }
+
+    try:
+        r = requests.get(url, params=params)
+        return r.json().get("results", [])
+    except:
+        return []
+
+def normalizar_openalex(entry):
+    return {
+        "titulo": entry.get("display_name", ""),
+        "link": entry.get("id", ""),
+        "pdf": None
+    }
+
+# =========================
+# VALIDACIÓN
+# =========================
+
+def es_valido(item):
+    if not item["link"]:
+        return False
+
+    if item["link"] in vistos:
+        return False
+
+    return True
+
+# =========================
+# ROUTER
+# =========================
+
+def elegir_fuente(dominio):
+    d = dominio.lower()
+
+    if d in ["mathematics", "physics"]:
+        return "arxiv"
+
+    if d in ["machine learning", "computer science"]:
+        return "semantic"
+
+    return "openalex"
 
 # =========================
 # GITHUB
@@ -124,7 +200,7 @@ def guardar_en_github(data):
     sha = r.json().get("sha") if r.status_code == 200 else None
 
     payload = {
-        "message": "update libros agent",
+        "message": "update agent knowledge system",
         "content": contenido_b64,
         "branch": BRANCH
     }
@@ -147,54 +223,58 @@ def guardar_en_github(data):
 # =========================
 
 def procesar():
-    query = random.choice(DOMINIOS)
-    print("QUERY:", query)
+    dominio = random.choice(DOMINIOS)
 
-    entries = buscar_libros(query)
+    fuente = elegir_fuente(dominio)
 
-    for entry in entries:
+    print("DOMINIO:", dominio)
+    print("FUENTE:", fuente)
 
-        titulo = getattr(entry, "title", "")
-        link = getattr(entry, "id", "")
+    if fuente == "arxiv":
+        raw = fetch_arxiv(dominio)
+        items = [normalizar_arxiv(x) for x in raw]
 
-        if not tiene_link(entry):
-            print("RECHAZADO (sin link):", titulo)
+    elif fuente == "semantic":
+        raw = fetch_semantic(dominio)
+        items = [normalizar_semantic(x) for x in raw]
+
+    else:
+        raw = fetch_openalex(dominio)
+        items = [normalizar_openalex(x) for x in raw]
+
+    for item in items:
+
+        if not es_valido(item):
             continue
 
-        if not tiene_pdf(entry):
-            print("RECHAZADO (sin PDF):", titulo)
-            continue
+        vistos.add(item["link"])
 
-        categoria = clasificar(titulo)
+        categoria = clasificar(item["titulo"])
 
         cajas[categoria].append({
-            "nombre": titulo,
-            "link": link
+            "nombre": item["titulo"],
+            "link": item["link"],
+            "pdf": item["pdf"],
+            "fuente": fuente,
+            "dominio": dominio
         })
 
-        print("CARGADO EN CAJA:", categoria)
-        print("ITEM:", titulo)
+        print("CARGADO:", item["titulo"], "|", categoria)
 
     return guardar_en_github(cajas)
 
 # =========================
-# AGENTE
+# LOOP AGENTE
 # =========================
 
 def agente():
-    print("INICIO DEL AGENTE")
+    print("INICIO AGENTE MULTIFUENTE")
 
     while True:
         try:
-            ok = procesar()
-
-            if ok:
-                print("GUARDADO OK")
-            else:
-                print("ERROR GUARDANDO")
-
+            procesar()
         except Exception as e:
-            print("ERROR GENERAL:", str(e))
+            print("ERROR:", str(e))
 
         time.sleep(30)
 
