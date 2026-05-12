@@ -3,14 +3,15 @@ import json
 import base64
 import requests
 import feedparser
+import os
 from urllib.parse import quote
 
 # =========================
-# CONFIGURACIÓN
+# CONFIGURACIÓN SEGURA
 # =========================
 
-GITHUB_TOKEN = "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"
-REPO = "meganferreti75-netizen/Agent-books" 
+GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
+REPO = "meganferreti75-netizen/Agent-books"
 FILE_PATH = "estado_libros.json"
 BRANCH = "main"
 
@@ -27,6 +28,8 @@ cajas = {
     "arte": [],
     "ingenieria": []
 }
+
+vistos = set()
 
 # =========================
 # ARXIV
@@ -70,24 +73,23 @@ def clasificar(texto):
     return "matematicas"
 
 # =========================
-# GITHUB (VERIFICADO)
+# GITHUB SAFE UPDATE
 # =========================
 
 def guardar_en_github(data):
     url = f"https://api.github.com/repos/{REPO}/contents/{FILE_PATH}"
 
     headers = {
-        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Authorization": f"token {GITHUB_TOKEN}",
         "Accept": "application/vnd.github+json"
     }
 
     contenido = json.dumps(data, ensure_ascii=False, indent=2)
     contenido_b64 = base64.b64encode(contenido.encode()).decode()
 
-    # obtener SHA si existe
     r = requests.get(url, headers=headers)
-    sha = None
 
+    sha = None
     if r.status_code == 200:
         sha = r.json().get("sha")
 
@@ -102,13 +104,12 @@ def guardar_en_github(data):
 
     resp = requests.put(url, headers=headers, json=payload)
 
-    # VERDAD DEL SISTEMA
     print("GITHUB STATUS:", resp.status_code)
-    print("GITHUB RESPONSE:", resp.text)
 
     if resp.status_code in [200, 201]:
         return True
     else:
+        print("ERROR:", resp.text)
         return False
 
 # =========================
@@ -119,6 +120,11 @@ def procesar():
     resultados = buscar_libros("graph theory")
 
     for libro in resultados:
+        if libro["link"] in vistos:
+            continue
+
+        vistos.add(libro["link"])
+
         categoria = clasificar(libro["nombre"])
 
         cajas[categoria].append({
@@ -129,13 +135,7 @@ def procesar():
         print("PROCESANDO:", libro["nombre"])
         print("CLASIFICADO EN:", categoria)
 
-    # persistencia validada
-    ok = guardar_en_github(cajas)
-
-    if ok:
-        print("GUARDADO EN GITHUB CONFIRMADO")
-    else:
-        print("FALLO EN PERSISTENCIA")
+    return guardar_en_github(cajas)
 
 # =========================
 # AGENTE
@@ -145,7 +145,17 @@ def agente():
     print("INICIO DEL AGENTE")
 
     while True:
-        procesar()
+        try:
+            ok = procesar()
+
+            if ok:
+                print("GUARDADO OK")
+            else:
+                print("ERROR GUARDANDO")
+
+        except Exception as e:
+            print("ERROR GENERAL:", str(e))
+
         time.sleep(30)
 
 # =========================
