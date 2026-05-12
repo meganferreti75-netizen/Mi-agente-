@@ -5,9 +5,10 @@ import requests
 import feedparser
 import os
 from urllib.parse import quote
+import random
 
 # =========================
-# CONFIGURACIÓN SEGURA
+# CONFIGURACIÓN
 # =========================
 
 GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
@@ -26,29 +27,269 @@ cajas = {
     "biologia": [],
     "filosofia": [],
     "arte": [],
-    "ingenieria": []
+    "ingenieria": [],
+    "cs": [],
+    "estadistica": []
 }
 
-vistos = set()
-
 # =========================
-# ARXIV
+# ESPACIO DE EXPLORACIÓN
 # =========================
 
-def buscar_libros(query="graph theory", max_results=5):
+DOMINIOS = [
+
+# =========================
+# MATEMÁTICAS PURAS
+# =========================
+"mathematics",
+"foundations of mathematics",
+"mathematical logic",
+"set theory",
+"model theory",
+"proof theory",
+"recursion theory",
+"category theory",
+"algebra",
+"linear algebra",
+"abstract algebra",
+"group theory",
+"ring theory",
+"field theory",
+"representation theory",
+"lie algebras",
+"commutative algebra",
+"homological algebra",
+"geometry",
+"euclidean geometry",
+"differential geometry",
+"algebraic geometry",
+"non-euclidean geometry",
+"topology",
+"algebraic topology",
+"differential topology",
+"geometric topology",
+"analysis",
+"real analysis",
+"complex analysis",
+"functional analysis",
+"harmonic analysis",
+"measure theory",
+"ergodic theory",
+"operator theory",
+"dynamical systems",
+"chaos theory",
+"fractal geometry",
+
+# =========================
+# TEORÍA DE NÚMEROS Y DISCRETA
+# =========================
+"number theory",
+"analytic number theory",
+"algebraic number theory",
+"combinatorics",
+"enumerative combinatorics",
+"extremal combinatorics",
+"probabilistic combinatorics",
+"graph theory",
+"theoretical computer science",
+"discrete mathematics",
+
+# =========================
+# PROBABILIDAD Y ESTADÍSTICA
+# =========================
+"probability theory",
+"stochastic processes",
+"random walks",
+"markov chains",
+"statistics",
+"mathematical statistics",
+"inference theory",
+"bayesian statistics",
+"information theory",
+"entropy",
+
+# =========================
+# FÍSICA FUNDAMENTAL
+# =========================
+"physics",
+"classical mechanics",
+"newtonian mechanics",
+"lagrangian mechanics",
+"hamiltonian mechanics",
+"electromagnetism",
+"optics",
+"thermodynamics",
+"statistical mechanics",
+"fluid mechanics",
+"plasma physics",
+
+# =========================
+# FÍSICA MODERNA
+# =========================
+"quantum mechanics",
+"quantum field theory",
+"particle physics",
+"nuclear physics",
+"high energy physics",
+"relativity",
+"general relativity",
+"cosmology",
+"astrophysics",
+"condensed matter physics",
+
+# =========================
+# COMPUTACIÓN
+# =========================
+"computer science",
+"algorithms",
+"data structures",
+"complexity theory",
+"computability theory",
+"automata theory",
+"formal languages",
+"programming languages",
+"compiler theory",
+"operating systems",
+"distributed systems",
+"databases",
+"machine learning",
+"deep learning",
+"artificial intelligence",
+"reinforcement learning",
+"computer vision",
+"natural language processing",
+"robotics",
+"cryptography",
+"quantum computing",
+
+# =========================
+# INGENIERÍA
+# =========================
+"engineering",
+"electrical engineering",
+"mechanical engineering",
+"civil engineering",
+"chemical engineering",
+"aerospace engineering",
+"control theory",
+"signal processing",
+"systems engineering",
+"robotic systems",
+
+# =========================
+# QUÍMICA
+# =========================
+"chemistry",
+"physical chemistry",
+"organic chemistry",
+"inorganic chemistry",
+"analytical chemistry",
+"quantum chemistry",
+"electrochemistry",
+"chemical kinetics",
+"materials science",
+
+# =========================
+# BIOLOGÍA
+# =========================
+"biology",
+"molecular biology",
+"cell biology",
+"genetics",
+"evolutionary biology",
+"ecology",
+"neuroscience",
+"bioinformatics",
+"biophysics",
+"systems biology",
+
+# =========================
+# MEDICINA
+# =========================
+"medicine",
+"clinical medicine",
+"pathology",
+"pharmacology",
+"immunology",
+"virology",
+"epidemiology",
+"public health",
+
+# =========================
+# CIENCIAS DE LA TIERRA
+# =========================
+"earth science",
+"geology",
+"geophysics",
+"climatology",
+"meteorology",
+"oceanography",
+"seismology",
+
+# =========================
+# ECONOMÍA Y SOCIALES CUANTITATIVAS
+# =========================
+"economics",
+"microeconomics",
+"macroeconomics",
+"econometrics",
+"game theory",
+"social networks",
+"complex networks",
+"political science",
+"sociology (quantitative)",
+"behavioral economics",
+
+# =========================
+# INTERDISCIPLINARIO
+# =========================
+"complex systems",
+"nonlinear systems",
+"network science",
+"data science",
+"computational science",
+"systems biology",
+"computational neuroscience",
+"mathematical biology",
+
+# =========================
+# FILOSOFÍA FORMAL
+# =========================
+"philosophy of science",
+"epistemology",
+"logic",
+"formal epistemology",
+"philosophy of mathematics"
+]
+
+# =========================
+# ARXIV EXPANDIDO
+# =========================
+
+def buscar_libros(query, max_results=20):
     query = quote(query)
-    url = f"http://export.arxiv.org/api/query?search_query=all:{query}&start=0&max_results={max_results}"
-    feed = feedparser.parse(url)
 
-    resultados = []
+    url = (
+        "http://export.arxiv.org/api/query?"
+        f"search_query=all:{query}"
+        "&start=0"
+        f"&max_results={max_results}"
+    )
 
-    for entry in feed.entries:
-        resultados.append({
-            "nombre": entry.title,
-            "link": entry.id
-        })
+    try:
+        feed = feedparser.parse(url)
 
-    return resultados
+        return [
+            {
+                "nombre": entry.title,
+                "link": entry.id
+            }
+            for entry in feed.entries
+        ]
+
+    except Exception as e:
+        print("ERROR ARXIV:", str(e))
+        return []
 
 # =========================
 # CLASIFICACIÓN
@@ -57,7 +298,7 @@ def buscar_libros(query="graph theory", max_results=5):
 def clasificar(texto):
     t = texto.lower()
 
-    if any(k in t for k in ["graph", "algebra", "geometry", "number"]):
+    if any(k in t for k in ["graph", "algebra", "geometry", "number", "topology"]):
         return "matematicas"
     if "physics" in t:
         return "fisica"
@@ -69,11 +310,15 @@ def clasificar(texto):
         return "filosofia"
     if "engineering" in t:
         return "ingenieria"
+    if "machine learning" in t:
+        return "cs"
+    if "statistics" in t or "probability" in t:
+        return "estadistica"
 
     return "matematicas"
 
 # =========================
-# GITHUB SAFE UPDATE
+# GITHUB
 # =========================
 
 def guardar_en_github(data):
@@ -89,9 +334,7 @@ def guardar_en_github(data):
 
     r = requests.get(url, headers=headers)
 
-    sha = None
-    if r.status_code == 200:
-        sha = r.json().get("sha")
+    sha = r.json().get("sha") if r.status_code == 200 else None
 
     payload = {
         "message": "update libros agent",
@@ -106,25 +349,23 @@ def guardar_en_github(data):
 
     print("GITHUB STATUS:", resp.status_code)
 
-    if resp.status_code in [200, 201]:
-        return True
-    else:
+    if resp.status_code not in [200, 201]:
         print("ERROR:", resp.text)
-        return False
+
+    return resp.status_code in [200, 201]
 
 # =========================
 # PIPELINE
 # =========================
 
 def procesar():
-    resultados = buscar_libros("graph theory")
+    query = random.choice(DOMINIOS)
+
+    print("QUERY ACTUAL:", query)
+
+    resultados = buscar_libros(query, max_results=20)
 
     for libro in resultados:
-        if libro["link"] in vistos:
-            continue
-
-        vistos.add(libro["link"])
-
         categoria = clasificar(libro["nombre"])
 
         cajas[categoria].append({
@@ -142,7 +383,7 @@ def procesar():
 # =========================
 
 def agente():
-    print("INICIO DEL AGENTE")
+    print("INICIO DEL AGENTE EXPANDIDO")
 
     while True:
         try:
