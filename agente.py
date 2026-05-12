@@ -1,299 +1,139 @@
-import os
-import json
 import time
+import json
+import base64
 import requests
 import feedparser
-import urllib.parse
-from pypdf import PdfReader
+from urllib.parse import quote
 
-# ==========================================
-# CONFIG
-# ==========================================
+# =========================
+# CONFIGURACIÓN GITHUB
+# =========================
 
-ESTADO_PATH = "estado_libros.json"
-DOWNLOAD_DIR = "pdfs"
+GITHUB_TOKEN = "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"
+REPO = "netizen/agent-books"
+FILE_PATH = "estado_libros.json"
+BRANCH = "main"
 
-os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+# =========================
+# ESTADO EN MEMORIA
+# =========================
 
-# ==========================================
-# MEMORIA / CAJAS
-# ==========================================
+cajas = {
+    "matematicas": [],
+    "fisica": [],
+    "quimica": [],
+    "biologia": [],
+    "filosofia": [],
+    "arte": [],
+    "ingenieria": []
+}
 
-def cargar_estado():
-
-    if os.path.exists(ESTADO_PATH):
-
-        with open(ESTADO_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-
-    return {
-        "matematicas": [],
-        "fisica": [],
-        "quimica": [],
-        "biologia": [],
-        "filosofia": [],
-        "arte": [],
-        "ingenieria": []
-    }
-
-def guardar_estado(cajas):
-
-    with open(ESTADO_PATH, "w", encoding="utf-8") as f:
-        json.dump(cajas, f, indent=2, ensure_ascii=False)
-
-# ==========================================
+# =========================
 # BUSCADOR ARXIV
-# ==========================================
+# =========================
 
-def buscar_libros(query="graph theory", max_results=10):
-
-    query_encoded = urllib.parse.quote(query)
-
-    url = (
-        "http://export.arxiv.org/api/query?"
-        f"search_query=all:{query_encoded}"
-        f"&start=0"
-        f"&max_results={max_results}"
-    )
-
+def buscar_libros(query="graph theory", max_results=5):
+    query = quote(query)
+    url = f"http://export.arxiv.org/api/query?search_query=all:{query}&start=0&max_results={max_results}"
     feed = feedparser.parse(url)
 
     resultados = []
 
     for entry in feed.entries:
-
-        pdf_url = entry.id.replace("abs", "pdf") + ".pdf"
-
         resultados.append({
-            "title": entry.title,
-            "url": pdf_url
+            "titulo": entry.title,
+            "link": entry.id,
+            "resumen": entry.summary
         })
 
     return resultados
 
-# ==========================================
-# DESCARGA PDF
-# ==========================================
+# =========================
+# CLASIFICACIÓN SIMPLE
+# =========================
 
-def descargar_pdf(url, nombre):
+def clasificar(texto):
+    t = texto.lower()
 
-    try:
-
-        path = os.path.join(DOWNLOAD_DIR, nombre + ".pdf")
-
-        response = requests.get(url, timeout=30)
-
-        if response.status_code != 200:
-            return None
-
-        with open(path, "wb") as f:
-            f.write(response.content)
-
-        return path
-
-    except Exception as e:
-
-        print("ERROR DESCARGA:", e)
-
-        return None
-
-# ==========================================
-# VALIDAR PDF
-# ==========================================
-
-def pdf_valido(path):
-
-    try:
-
-        reader = PdfReader(path)
-
-        paginas = len(reader.pages)
-
-        return paginas > 0
-
-    except Exception as e:
-
-        print("PDF CORRUPTO:", e)
-
-        return False
-
-# ==========================================
-# CLASIFICADOR SIMPLE
-# ==========================================
-
-def clasificar(titulo):
-
-    t = titulo.lower()
-
-    if (
-        "graph" in t or
-        "algebra" in t or
-        "geometry" in t or
-        "theorem" in t or
-        "math" in t
-    ):
+    if any(k in t for k in ["graph", "algebra", "geometry", "number"]):
         return "matematicas"
-
-    if (
-        "physics" in t or
-        "quantum" in t or
-        "relativity" in t
-    ):
+    if "physics" in t or "quantum" in t:
         return "fisica"
-
-    if (
-        "chem" in t or
-        "molecule" in t
-    ):
+    if "chem" in t:
         return "quimica"
-
-    if (
-        "bio" in t or
-        "genetic" in t
-    ):
+    if "bio" in t:
         return "biologia"
-
-    if (
-        "philosophy" in t or
-        "ethics" in t
-    ):
+    if "philosophy" in t:
         return "filosofia"
-
-    if (
-        "art" in t or
-        "painting" in t
-    ):
-        return "arte"
-
-    if (
-        "engineering" in t or
-        "system" in t
-    ):
+    if "engineering" in t:
         return "ingenieria"
 
     return "matematicas"
 
-# ==========================================
-# EVITAR DUPLICADOS
-# ==========================================
+# =========================
+# GUARDAR EN GITHUB
+# =========================
 
-def ya_existe(cajas, nombre):
+def guardar_en_github(data):
+    url = f"https://api.github.com/repos/{REPO}/contents/{FILE_PATH}"
 
-    for categoria in cajas.values():
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json"
+    }
 
-        for item in categoria:
+    contenido = json.dumps(data, ensure_ascii=False, indent=2)
+    contenido_b64 = base64.b64encode(contenido.encode()).decode()
 
-            if item["nombre"] == nombre:
-                return True
+    r = requests.get(url, headers=headers)
+    sha = None
+    if r.status_code == 200:
+        sha = r.json()["sha"]
 
-    return False
+    payload = {
+        "message": "update libros agent",
+        "content": contenido_b64,
+        "branch": BRANCH
+    }
 
-# ==========================================
+    if sha:
+        payload["sha"] = sha
+
+    requests.put(url, headers=headers, json=payload)
+
+# =========================
 # PROCESAMIENTO
-# ==========================================
+# =========================
 
-def procesar_query(cajas, query):
-
-    print("\n============================")
-    print("BUSCANDO:", query)
-    print("============================\n")
-
-    resultados = buscar_libros(query=query, max_results=10)
+def procesar():
+    resultados = buscar_libros("graph theory")
 
     for libro in resultados:
-
-        nombre = libro["title"]
-        url = libro["url"]
-
-        if ya_existe(cajas, nombre):
-
-            print("YA EXISTE:", nombre)
-
-            continue
-
-        print("PROCESANDO:", nombre)
-
-        safe_name = (
-            nombre
-            .replace(" ", "_")
-            .replace("/", "_")
-            .replace("\\", "_")
-            .replace(":", "_")
-        )
-
-        path = descargar_pdf(url, safe_name)
-
-        if not path:
-
-            print("NO DESCARGADO")
-
-            continue
-
-        valido = pdf_valido(path)
-
-        if not valido:
-
-            print("PDF INVALIDO")
-
-            continue
-
-        categoria = clasificar(nombre)
+        categoria = clasificar(libro["titulo"])
 
         cajas[categoria].append({
-            "nombre": nombre,
-            "link": url
+            "nombre": libro["titulo"],
+            "link": libro["link"]
         })
-
-        guardar_estado(cajas)
 
         print("GUARDADO EN:", categoria)
 
-# ==========================================
+    guardar_en_github(cajas)
+
+# =========================
 # AGENTE PRINCIPAL
-# ==========================================
+# =========================
 
 def agente():
-
-    cajas = cargar_estado()
-
-    queries = [
-
-        "graph theory",
-        "competitive programming",
-        "number theory",
-        "linear algebra",
-        "algorithms",
-        "data structures",
-        "optimization",
-        "machine learning",
-        "geometry",
-        "combinatorics"
-
-    ]
-
-    i = 0
+    print("INICIO DEL AGENTE")
 
     while True:
-
-        query_actual = queries[i % len(queries)]
-
-        try:
-
-            procesar_query(cajas, query_actual)
-
-        except Exception as e:
-
-            print("ERROR GENERAL:", e)
-
-        i += 1
-
-        print("\nDURMIENDO 30 SEGUNDOS...\n")
-
+        procesar()
         time.sleep(30)
 
-# ==========================================
-# RUN
-# ==========================================
+# =========================
+# ENTRYPOINT
+# =========================
 
 if __name__ == "__main__":
     agente()
