@@ -1,6 +1,4 @@
 import time
-import json
-import base64
 import requests
 import feedparser
 import os
@@ -247,46 +245,7 @@ def elegir_fuente(dominio):
         "arxiv",
         "semantic",
         "openalex"
-    ])
-
-
-# =========================
-# GITHUB
-# =========================
-
-def guardar_en_github(data):
-    url = f"https://api.github.com/repos/{REPO}/contents/{FILE_PATH}"
-
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github+json"
-    }
-
-    contenido = json.dumps(data, ensure_ascii=False, indent=2)
-    contenido_b64 = base64.b64encode(contenido.encode()).decode()
-
-    r = requests.get(url, headers=headers)
-    sha = r.json().get("sha") if r.status_code == 200 else None
-
-    payload = {
-        "message": "update agent knowledge system",
-        "content": contenido_b64,
-        "branch": BRANCH
-    }
-
-    if sha:
-        payload["sha"] = sha
-
-    resp = requests.put(url, headers=headers, json=payload)
-
-    print("GITHUB STATUS:", resp.status_code)
-
-    if resp.status_code not in [200, 201]:
-        print("ERROR:", resp.text)
-        return False
-
-    return True
-
+    
 # =========================
 # PIPELINE
 # =========================
@@ -320,24 +279,28 @@ def procesar():
 
         categoria = clasificar(item["titulo"])
 
-        cajas[categoria].append({
-            "nombre": item["titulo"],
-            "link": item["link"],
-            "pdf": item["pdf"],
-            "fuente": fuente,
-            "dominio": dominio
-        })
+        guardar_libro({
+    "titulo": item["titulo"],
+    "link": item["link"],
+    "pdf": item["pdf"],
+    "dominio": dominio,
+    "categoria": categoria,
+    "fuente": fuente
+})
 
         print("CARGADO:", item["titulo"], "|", categoria)
 
-    return guardar_en_github(cajas)
+    from storage import guardar_libro, init_storage
 
 # =========================
 # LOOP AGENTE
 # =========================
 
 def agente():
+    def agente():
     print("INICIO AGENTE MULTIFUENTE")
+
+    init_storage()
 
     while True:
         try:
@@ -346,7 +309,6 @@ def agente():
             print("ERROR:", str(e))
 
         time.sleep(30)
-
 # =========================
 # ENTRYPOINT
 # =========================
