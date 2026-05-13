@@ -167,19 +167,88 @@ def es_valido(item):
     return True
 
 # =========================
-# ROUTER
+#
+# =========================
+# ROUTER INTELIGENTE
 # =========================
 
 def elegir_fuente(dominio):
+
     d = dominio.lower()
 
-    if d in ["mathematics", "physics"]:
-        return "arxiv"
+    matematicas = [
+        "mathematics",
+        "algebra",
+        "geometry",
+        "topology",
+        "analysis",
+        "number theory",
+        "combinatorics",
+        "graph theory",
+        "probability",
+        "statistics"
+    ]
 
-    if d in ["machine learning", "computer science"]:
-        return "semantic"
+    fisica = [
+        "physics"
+    ]
 
-    return "openalex"
+    computacion = [
+        "computer science",
+        "machine learning"
+    ]
+
+    biologia = [
+        "biology",
+        "neuroscience"
+    ]
+
+    quimica = [
+        "chemistry"
+    ]
+
+    # =========================
+    # MATEMÁTICAS Y FÍSICA
+    # =========================
+
+    if d in matematicas or d in fisica:
+        return random.choice([
+            "arxiv",
+            "semantic",
+            "openalex"
+        ])
+
+    # =========================
+    # COMPUTACIÓN
+    # =========================
+
+    if d in computacion:
+        return random.choice([
+            "semantic",
+            "arxiv",
+            "openalex"
+        ])
+
+    # =========================
+    # BIOLOGÍA Y QUÍMICA
+    # =========================
+
+    if d in biologia or d in quimica:
+        return random.choice([
+            "semantic",
+            "openalex"
+        ])
+
+    # =========================
+    # DEFAULT
+    # =========================
+
+    return random.choice([
+        "arxiv",
+        "semantic",
+        "openalex"
+    ])
+
 
 # =========================
 # GITHUB
